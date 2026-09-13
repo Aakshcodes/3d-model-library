@@ -91,6 +91,19 @@ html, body {
   transition: width 0.3s ease;
 }
 
+/* Indeterminate shimmer — used when Content-Length is unknown */
+#load-bar.indeterminate {
+  width: 40% !important;
+  background: linear-gradient(90deg, transparent, #6699ff, #cc88ff, transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 #load-pct {
   font-size: 0.75rem;
   color: #6688bb;

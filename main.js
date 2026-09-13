@@ -66,6 +66,32 @@ const loadPct = document.getElementById("load-pct");
 const tooltip = document.getElementById("tooltip");
 const toastEl = document.getElementById("toast");
 
+// ── Loading helpers ────────────────────────────────────────────────────────────
+// Use indeterminate animated bar (xhr.total is often 0 — no Content-Length header)
+function setLoadingIndeterminate() {
+  if (loadBar) loadBar.classList.add("indeterminate");
+  if (loadPct) loadPct.textContent = "Loading…";
+}
+function setLoadingDone() {
+  if (loadBar) { loadBar.classList.remove("indeterminate"); loadBar.style.width = "100%"; }
+  if (loadPct) loadPct.textContent = "100%";
+  setTimeout(() => { if (overlay) overlay.classList.add("hidden"); }, 400);
+}
+function setLoadingError(msg) {
+  if (overlay) {
+    overlay.innerHTML = `
+      <div class="loader-inner">
+        <p style="color:#ff6b6b;font-size:1rem;text-align:center">⚠️ Failed to load model</p>
+        <p style="color:#aaa;font-size:0.8rem;margin-top:0.5rem;text-align:center">${msg}</p>
+        <button onclick="location.reload()" style="margin-top:1rem;padding:0.4rem 1.2rem;border:1px solid #6688ff;background:transparent;color:#99aaff;border-radius:99px;cursor:pointer;font-size:0.85rem">Retry</button>
+      </div>`;
+  }
+}
+
+// Timeout: if model hasn't loaded in 60s, show error
+const loadTimeout = setTimeout(() => setLoadingError("Timed out. Check console (F12) for details."), 60000);
+setLoadingIndeterminate();
+
 function showToast(msg) {
   if (!toastEl) return;
   toastEl.textContent = msg;
@@ -87,14 +113,13 @@ function isDoorGroup(name) {
 // ─── Load GLTF ────────────────────────────────────────────────────────────────
 let model          = null;
 let modelBaseScale = 1;
-let totalBytesLoaded = 0;
-let totalBytesTotal  = 0;
-let allSceneMeshes   = []; // for double-click raycasting
+let allSceneMeshes = []; // for double-click raycasting
 
 const loader = new GLTFLoader();
 loader.load(
   "models/home/scene.gltf",
   (gltf) => {
+    clearTimeout(loadTimeout); // cancel error timeout
     model = gltf.scene;
 
     // ── Normalise size & center ───────────────────────────────────────────────
@@ -152,27 +177,17 @@ loader.load(
     const newCenter = newBox.getCenter(new THREE.Vector3());
     controls.target.copy(newCenter);
 
-    if (loadBar) loadBar.style.width = "100%";
-    if (loadPct) loadPct.textContent  = "100%";
-    setTimeout(() => { if (overlay) overlay.classList.add("hidden"); }, 300);
+    setLoadingDone();
 
-    console.log(`✅ Loaded. Door groups found: ${new Set([...doorStates.values()].map(s => s.group.name)).size}`);
-    showToast(`✅ Loaded — ${doorMeshes.length > 0 ? "Click any door to open!" : "No door meshes found (check console)"}`);
+    const doorCount = new Set([...doorStates.values()].map(s => s.group.uuid)).size;
+    console.log(`✅ Loaded. Door groups: ${doorCount}`);
+    showToast(doorCount > 0 ? `✅ Loaded — Click any door to open!` : `✅ Loaded`);
   },
-  (xhr) => {
-    if (xhr.total > 0) {
-      totalBytesLoaded += xhr.loaded - (xhr._prevLoaded || 0);
-      totalBytesTotal  += xhr.total  - (xhr._prevTotal  || 0);
-      xhr._prevLoaded   = xhr.loaded;
-      xhr._prevTotal    = xhr.total;
-      const pct = Math.min(Math.round((totalBytesLoaded / totalBytesTotal) * 100), 99);
-      if (loadBar) loadBar.style.width = pct + "%";
-      if (loadPct) loadPct.textContent  = pct + "%";
-    }
-  },
+  (_xhr) => { /* progress: indeterminate bar handles visuals */ },
   (err) => {
-    console.error(err);
-    if (overlay) overlay.innerHTML = `<p style="color:#ff6b6b">⚠️ ${err.message}</p>`;
+    clearTimeout(loadTimeout);
+    console.error("GLTF Error:", err);
+    setLoadingError(err?.message || String(err));
   }
 );
 
