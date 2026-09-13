@@ -127,11 +127,19 @@ function wrapWithPivot(mesh) {
 let model          = null;
 let modelBaseScale = 1;
 
+// Track overall loading progress across all GLTF sub-files
+let totalBytesLoaded = 0;
+let totalBytesTotal  = 0;
+
 const loader = new GLTFLoader();
 loader.load(
   "models/home/scene.gltf",
   (gltf) => {
     model = gltf.scene;
+
+    // Show 100% before hiding
+    if (loadBar) loadBar.style.width = "100%";
+    if (loadPct)  loadPct.textContent  = "100%";
 
     // Centre and normalise
     const box    = new THREE.Box3().setFromObject(model);
@@ -192,11 +200,21 @@ loader.load(
 
     scene.add(model);
     camera.lookAt(0, 0, 0);
-    if (overlay) overlay.classList.add("hidden");
+
+    // Small delay so user sees 100% before overlay fades
+    setTimeout(() => {
+      if (overlay) overlay.classList.add("hidden");
+    }, 300);
   },
   (xhr) => {
+    // GLTF fires separate XHR events for .gltf, .bin, and each texture.
+    // Accumulate totals to keep percentage 0-100%.
     if (xhr.total > 0) {
-      const pct = Math.round((xhr.loaded / xhr.total) * 100);
+      totalBytesLoaded += xhr.loaded - (xhr._prevLoaded || 0);
+      totalBytesTotal  += xhr.total  - (xhr._prevTotal  || 0);
+      xhr._prevLoaded   = xhr.loaded;
+      xhr._prevTotal    = xhr.total;
+      const pct = Math.min(Math.round((totalBytesLoaded / totalBytesTotal) * 100), 99);
       if (loadBar) loadBar.style.width = pct + "%";
       if (loadPct)  loadPct.textContent  = pct + "%";
     }
@@ -330,9 +348,10 @@ function animate() {
   smoothMouseY += (rawMouseY - smoothMouseY) * decay;
 
   if (model) {
-    model.rotation.y += 0.3 * delta;
-    model.rotation.x  = smoothMouseY * 0.12;
-    model.rotation.z  = smoothMouseX * 0.06;
+    // ── NO auto-rotation: user controls with OrbitControls ──────────────────
+    // Only subtle mouse parallax tilt (no spinning)
+    model.rotation.x = smoothMouseY * 0.08;
+    model.rotation.z = smoothMouseX * 0.04;
   }
 
   // ── Animate all gate/door pivots ──────────────────────────────────────────
