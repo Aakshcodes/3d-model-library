@@ -52,8 +52,14 @@ keyLight.shadow.camera.top     =  15;
 keyLight.shadow.camera.bottom  = -15;
 scene.add(keyLight);
 
-scene.add(Object.assign(new THREE.DirectionalLight(0x6688cc, 1.5), { position: new THREE.Vector3(-8, 4, -4) }));
-scene.add(Object.assign(new THREE.DirectionalLight(0xcc88ff, 1.0), { position: new THREE.Vector3(0, -4, -10) }));
+const fillLight = new THREE.DirectionalLight(0x6688cc, 1.5);
+fillLight.position.set(-8, 4, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xcc88ff, 1.0);
+rimLight.position.set(0, -4, -10);
+scene.add(rimLight);
+
 scene.add(new THREE.HemisphereLight(0xfff4b0, 0x080820, 0.5));
 
 const orbitPoint = new THREE.PointLight(0x44aaff, 2.5, 18);
