@@ -132,6 +132,9 @@ html, body {
   text-align: center;
 }
 
+.hint-door { color: #ff9966; font-weight: 500; }
+.hint-fly  { color: #66ddaa; font-weight: 500; }
+
 /* ─── Badge ────────────────────────────────────────────────────────────────── */
 .badge {
   position: fixed;

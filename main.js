@@ -4,130 +4,140 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 const container = document.getElementById("Home3D");
-
-const scene = new THREE.Scene();
+const scene     = new THREE.Scene();
 scene.background = new THREE.Color(0x0d0d1a);
-scene.fog = new THREE.FogExp2(0x0d0d1a, 0.014);
+scene.fog        = new THREE.FogExp2(0x0d0d1a, 0.012);
 
 // ─── Camera ───────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(
   60,
   container.clientWidth / container.clientHeight,
   0.01,
-  1000
+  500
 );
-camera.position.set(0, 2, 12);
+camera.position.set(0, 3, 14);
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled  = true;
+renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
+renderer.outputEncoding     = THREE.sRGBEncoding;
+renderer.toneMapping        = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.4;
 container.appendChild(renderer.domElement);
 
 // ─── Orbit Controls ───────────────────────────────────────────────────────────
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.06;
-controls.enablePan = false;
-controls.minDistance = 3;
-controls.maxDistance = 40;
-controls.autoRotate = false;
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.06;
+controls.enablePan      = true;
+controls.minDistance    = 1;    // allow going close/inside
+controls.maxDistance    = 50;
+controls.autoRotate     = false;
 
 // ─── Lights ───────────────────────────────────────────────────────────────────
-const ambientLight = new THREE.AmbientLight(0x404060, 1.5);
-scene.add(ambientLight);
+scene.add(new THREE.AmbientLight(0x404060, 1.5));
 
-const keyLight = new THREE.DirectionalLight(0xfff4e0, 3.5);
+const keyLight = new THREE.DirectionalLight(0xfff4e0, 3.0);
 keyLight.position.set(8, 12, 8);
-keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(1024, 1024);
-keyLight.shadow.camera.near = 0.5;
-keyLight.shadow.camera.far = 100;
+keyLight.castShadow             = true;
+keyLight.shadow.mapSize.width   = 512;   // ← optimised (was 1024)
+keyLight.shadow.mapSize.height  = 512;
+keyLight.shadow.camera.near     = 1;
+keyLight.shadow.camera.far      = 60;
+keyLight.shadow.camera.left     = -15;
+keyLight.shadow.camera.right    = 15;
+keyLight.shadow.camera.top      = 15;
+keyLight.shadow.camera.bottom   = -15;
 scene.add(keyLight);
 
-const fillLight = new THREE.DirectionalLight(0x6688cc, 1.8);
+const fillLight = new THREE.DirectionalLight(0x6688cc, 1.5);
 fillLight.position.set(-8, 4, -4);
 scene.add(fillLight);
 
-const rimLight = new THREE.DirectionalLight(0xcc88ff, 1.2);
-rimLight.position.set(0, -6, -10);
+const rimLight = new THREE.DirectionalLight(0xcc88ff, 1.0);
+rimLight.position.set(0, -4, -10);
 scene.add(rimLight);
 
-const groundLight = new THREE.HemisphereLight(0xfff4b0, 0x080820, 0.6);
-scene.add(groundLight);
+scene.add(new THREE.HemisphereLight(0xfff4b0, 0x080820, 0.5));
 
-const orbitPoint = new THREE.PointLight(0x44aaff, 3, 20);
+const orbitPoint = new THREE.PointLight(0x44aaff, 2.5, 18);
 scene.add(orbitPoint);
 
 // ─── Loading overlay ──────────────────────────────────────────────────────────
 const overlay = document.getElementById("loading-overlay");
 const loadBar = document.getElementById("load-bar");
-const loadPct  = document.getElementById("load-pct");
-
-// ─── Tooltip UI ───────────────────────────────────────────────────────────────
+const loadPct = document.getElementById("load-pct");
 const tooltip = document.getElementById("tooltip");
+const toastEl = document.getElementById("toast");
 
-// ─── Gate / Door State ────────────────────────────────────────────────────────
-// Keywords to auto-detect clickable meshes (gate, door, window, etc.)
-const CLICKABLE_KEYWORDS = [
-  "gate", "door", "door_leaf", "leaf", "panel",
-  "fence", "portal", "entri", "entry", "shutter", "window"
-];
+function showToast(msg, duration = 2200) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(() => toastEl.classList.remove("show"), duration);
+}
 
-// Map: mesh.uuid → { pivot: Group, open: bool, currentAngle: number, targetAngle: number, openAngle: number }
-const clickableObjects = new Map();
-// All THREE.Mesh objects eligible for raycasting
-let raycasterTargets = [];
+// ─── Model state ──────────────────────────────────────────────────────────────
+let model          = null;
+let modelBaseScale = 1;
 
-function isClickable(name) {
-  const n = (name || "").toLowerCase();
-  return CLICKABLE_KEYWORDS.some((k) => n.includes(k));
+// ─── Door/Gate animation state ────────────────────────────────────────────────
+// Map: nodeUUID → { pivot: Group, open: bool, currentAngle: number, targetAngle: number }
+const doorStates = new Map();
+// All door meshes for raycasting
+const doorMeshes = [];
+
+// Keywords that identify door/gate nodes (matches GLTF names found in scene.gltf)
+const DOOR_KEYWORDS = ["Door.", "door.", "Gate", "gate"];
+
+function isDoor(name) {
+  // Match Door.001_7, Door.002_8, etc. — but NOT DoorFrame
+  return DOOR_KEYWORDS.some(k => name.includes(k)) && !name.toLowerCase().includes("frame");
 }
 
 /**
- * Given a mesh, wrap it in a pivot Group positioned at its left edge (hinge).
- * Returns the pivot group added to the scene (or parent).
+ * Wrap a door mesh in a pivot Group for hinge-style rotation.
+ * The pivot is placed at the left edge of the mesh's world bounding box.
  */
-function wrapWithPivot(mesh) {
-  // World bounding box
+function setupDoorPivot(mesh) {
+  // Save world transform before reparenting
+  const worldPos = new THREE.Vector3();
+  const worldQuat = new THREE.Quaternion();
+  const worldScale = new THREE.Vector3();
+  mesh.getWorldPosition(worldPos);
+  mesh.getWorldQuaternion(worldQuat);
+  mesh.getWorldScale(worldScale);
+
+  // Bounding box in world space
   const box    = new THREE.Box3().setFromObject(mesh);
   const size   = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
 
-  // Hinge at the left edge of the bounding box (local space)
-  // We pivot around Y axis — feels natural for a gate/door
-  const hingeOffset = new THREE.Vector3(
-    box.min.x - mesh.position.x, // left edge in local space
-    0,
-    0
-  );
+  // Hinge at left-most X edge (world space)
+  const hingeWorldX = box.min.x;
 
-  // Create pivot group at the hinge world position
+  // Create pivot group at hinge position
   const pivot = new THREE.Group();
-  pivot.position.copy(mesh.getWorldPosition(new THREE.Vector3()));
-  pivot.position.x = box.min.x; // hinge is left edge
+  pivot.position.set(hingeWorldX, worldPos.y, worldPos.z);
+  pivot.quaternion.copy(worldQuat);
 
-  // Reparent mesh into pivot
-  const parent = mesh.parent;
-  parent.add(pivot);
+  // Reparent mesh to pivot — keep scene as parent of pivot
+  const originalParent = mesh.parent;
+  originalParent.add(pivot);
   pivot.add(mesh);
 
-  // Offset mesh so its left edge aligns with pivot origin
-  mesh.position.x = size.x / 2;
+  // Shift mesh inside pivot so its left edge aligns with pivot origin
+  // (pivot origin = hinge = left edge of door)
+  mesh.position.set(size.x / 2, 0, 0);
+  mesh.quaternion.set(0, 0, 0, 1); // reset local rotation
 
   return pivot;
 }
 
-// ─── Load GLTF Model ──────────────────────────────────────────────────────────
-let model          = null;
-let modelBaseScale = 1;
-
-// Track overall loading progress across all GLTF sub-files
+// ─── Load GLTF ────────────────────────────────────────────────────────────────
 let totalBytesLoaded = 0;
 let totalBytesTotal  = 0;
 
@@ -137,11 +147,7 @@ loader.load(
   (gltf) => {
     model = gltf.scene;
 
-    // Show 100% before hiding
-    if (loadBar) loadBar.style.width = "100%";
-    if (loadPct)  loadPct.textContent  = "100%";
-
-    // Centre and normalise
+    // Centre & normalise
     const box    = new THREE.Box3().setFromObject(model);
     const size   = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
@@ -150,65 +156,50 @@ loader.load(
     model.scale.setScalar(modelBaseScale);
     model.position.sub(center.multiplyScalar(modelBaseScale));
 
-    // ── Traverse: shadows + find clickable meshes ──────────────────────────
-    const allMeshNames = [];
+    scene.add(model);
+
+    // ── Traverse: shadows + door detection ───────────────────────────────────
     model.traverse((child) => {
       if (!child.isMesh) return;
       child.castShadow    = true;
       child.receiveShadow = true;
 
-      const name = child.name || child.parent?.name || "";
-      allMeshNames.push(name);
+      // ── OPTIMISATION: share material instances ────────────────────────────
+      if (child.material) {
+        child.material.needsUpdate = false;
+      }
 
-      if (isClickable(name)) {
-        // Wrap with pivot for hinge animation
-        const pivot = wrapWithPivot(child);
-        const openAngle = Math.PI / 2; // 90° open
+      const name = child.name || "";
+      if (isDoor(name)) {
+        // Store original emissive for hover highlight
+        child.userData.origEmissive = (child.material?.emissive?.clone()) ?? new THREE.Color(0);
 
-        clickableObjects.set(child.uuid, {
+        // Setup hinge pivot
+        const pivot = setupDoorPivot(child);
+        doorStates.set(child.uuid, {
           pivot,
           open:         false,
           currentAngle: 0,
           targetAngle:  0,
-          openAngle,
         });
-
-        // Store original material for highlight
-        if (child.material) {
-          child.userData.origEmissive = child.material.emissive?.clone() ?? new THREE.Color(0x000000);
-        }
-
-        raycasterTargets.push(child);
-        console.log("✅ Clickable mesh found:", name);
+        doorMeshes.push(child);
       }
     });
 
-    // Log all mesh names so you can see what's in the model
-    console.log("─── ALL MESH NAMES ───");
-    console.table(allMeshNames);
+    // ── Camera: fit model in view ─────────────────────────────────────────────
+    const newBox = new THREE.Box3().setFromObject(model);
+    const newCenter = newBox.getCenter(new THREE.Vector3());
+    controls.target.copy(newCenter);
+    camera.lookAt(newCenter);
 
-    // If no named gate/door found, make ALL meshes clickable (fallback)
-    if (raycasterTargets.length === 0) {
-      console.warn("No gate/door keyword found. Making all meshes clickable. Check console for names.");
-      model.traverse((child) => {
-        if (child.isMesh) {
-          raycasterTargets.push(child);
-          console.log("Mesh:", child.name);
-        }
-      });
-    }
+    // 100% → fade overlay
+    if (loadBar) loadBar.style.width = "100%";
+    if (loadPct) loadPct.textContent  = "100%";
+    setTimeout(() => { if (overlay) overlay.classList.add("hidden"); }, 300);
 
-    scene.add(model);
-    camera.lookAt(0, 0, 0);
-
-    // Small delay so user sees 100% before overlay fades
-    setTimeout(() => {
-      if (overlay) overlay.classList.add("hidden");
-    }, 300);
+    showToast(`✅ Model loaded — ${doorMeshes.length} door(s) found. Click to open!`);
   },
   (xhr) => {
-    // GLTF fires separate XHR events for .gltf, .bin, and each texture.
-    // Accumulate totals to keep percentage 0-100%.
     if (xhr.total > 0) {
       totalBytesLoaded += xhr.loaded - (xhr._prevLoaded || 0);
       totalBytesTotal  += xhr.total  - (xhr._prevTotal  || 0);
@@ -216,124 +207,126 @@ loader.load(
       xhr._prevTotal    = xhr.total;
       const pct = Math.min(Math.round((totalBytesLoaded / totalBytesTotal) * 100), 99);
       if (loadBar) loadBar.style.width = pct + "%";
-      if (loadPct)  loadPct.textContent  = pct + "%";
+      if (loadPct) loadPct.textContent  = pct + "%";
     }
   },
-  (error) => {
-    console.error("GLTF load error:", error);
-    if (overlay) {
-      overlay.innerHTML = `<p style="color:#ff6b6b;">⚠️ Failed to load model.<br><small>${error.message || error}</small></p>`;
-    }
+  (err) => {
+    console.error(err);
+    if (overlay) overlay.innerHTML = `<p style="color:#ff6b6b">⚠️ ${err.message}</p>`;
   }
 );
 
 // ─── Raycaster ────────────────────────────────────────────────────────────────
-const raycaster    = new THREE.Raycaster();
-const clickedMouse = new THREE.Vector2();
+const raycaster  = new THREE.Raycaster();
+const ndc        = new THREE.Vector2(); // normalised device coords
 
-// Hover highlight
-let hoveredMesh = null;
-const hoverMouse = new THREE.Vector2();
+let hoveredDoor  = null;
+
+// ── Hover ─────────────────────────────────────────────────────────────────────
+let rawMouseX = 0, rawMouseY = 0;
 
 window.addEventListener("mousemove", (e) => {
   rawMouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
   rawMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
 
-  hoverMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-  hoverMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  if (doorMeshes.length === 0) return;
 
-  // Hover detection for cursor change + highlight
-  if (raycasterTargets.length > 0) {
-    raycaster.setFromCamera(hoverMouse, camera);
-    const hits = raycaster.intersectObjects(raycasterTargets, false);
-    if (hits.length > 0) {
-      const mesh = hits[0].object;
-      if (mesh !== hoveredMesh) {
-        // Un-highlight old
-        if (hoveredMesh && hoveredMesh.material) {
-          hoveredMesh.material.emissive?.set(hoveredMesh.userData.origEmissive || 0x000000);
-        }
-        // Highlight new
-        hoveredMesh = mesh;
-        if (hoveredMesh.material && hoveredMesh.material.emissive) {
-          hoveredMesh.material.emissive.set(0x333366);
-        }
-        document.body.style.cursor = "pointer";
-        const state = clickableObjects.get(hoveredMesh.uuid);
-        if (tooltip) {
-          tooltip.textContent = state
-            ? (state.open ? "Click to close" : "Click to open")
-            : `Click → ${hoveredMesh.name}`;
-          tooltip.style.opacity = "1";
-        }
+  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+
+  const hits = raycaster.intersectObjects(doorMeshes, false);
+
+  if (hits.length > 0) {
+    const mesh = hits[0].object;
+    if (mesh !== hoveredDoor) {
+      // Un-highlight old
+      if (hoveredDoor?.material?.emissive) {
+        hoveredDoor.material.emissive.copy(hoveredDoor.userData.origEmissive);
       }
-    } else {
-      if (hoveredMesh && hoveredMesh.material) {
-        hoveredMesh.material.emissive?.set(hoveredMesh.userData.origEmissive || 0x000000);
+      hoveredDoor = mesh;
+      // Highlight new
+      if (hoveredDoor.material?.emissive) {
+        hoveredDoor.material.emissive.set(0x224488);
       }
-      hoveredMesh = null;
-      document.body.style.cursor = "default";
-      if (tooltip) tooltip.style.opacity = "0";
+      document.body.style.cursor = "pointer";
+      const st = doorStates.get(hoveredDoor.uuid);
+      if (tooltip) {
+        tooltip.textContent = st?.open ? "🔒 Click to close" : "🚪 Click to open";
+        tooltip.style.opacity = "1";
+      }
     }
+  } else {
+    if (hoveredDoor?.material?.emissive) {
+      hoveredDoor.material.emissive.copy(hoveredDoor.userData.origEmissive);
+    }
+    hoveredDoor = null;
+    document.body.style.cursor = "default";
+    if (tooltip) tooltip.style.opacity = "0";
   }
 });
 
-// Click → toggle open/close
-window.addEventListener("click", (e) => {
-  // Don't fire if user was orbiting (mousedown → mousemove → mouseup)
-  clickedMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-  clickedMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+// ── Single Click → toggle door ────────────────────────────────────────────────
+let pointerMoved = false;
+window.addEventListener("pointerdown", () => { pointerMoved = false; });
+window.addEventListener("pointermove", () => { pointerMoved = true; });
 
-  if (raycasterTargets.length === 0) return;
+window.addEventListener("pointerup", (e) => {
+  if (pointerMoved) return; // was a drag, not a click
 
-  raycaster.setFromCamera(clickedMouse, camera);
-  const hits = raycaster.intersectObjects(raycasterTargets, false);
+  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+
+  const hits = raycaster.intersectObjects(doorMeshes, false);
   if (hits.length === 0) return;
 
   const mesh  = hits[0].object;
-  const state = clickableObjects.get(mesh.uuid);
+  const state = doorStates.get(mesh.uuid);
+  if (!state) return;
 
-  if (state) {
-    // Toggle
-    state.open        = !state.open;
-    state.targetAngle = state.open ? state.openAngle : 0;
-    console.log(`${state.open ? "Opening" : "Closing"} → ${mesh.name}`);
-    showToast(state.open ? "🚪 Opening…" : "🔒 Closing…");
-  } else {
-    // Not a mapped gate — just log the name for debugging
-    console.log("Clicked mesh:", mesh.name || "(no name)");
-    showToast(`Clicked: ${mesh.name || "(unnamed mesh)"}`);
-  }
+  state.open        = !state.open;
+  state.targetAngle = state.open ? -Math.PI / 2 : 0; // open 90° inward
+  showToast(state.open ? "🚪 Opening door…" : "🔒 Closing door…");
 });
 
-// ─── Toast notification ───────────────────────────────────────────────────────
-function showToast(msg) {
-  const t = document.getElementById("toast");
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.classList.remove("show"), 2200);
-}
+// ── Double Click → fly camera inside ─────────────────────────────────────────
+let flyTarget    = null; // {pos: Vector3, lookAt: Vector3}
+let flyProgress  = 1;    // 0=start, 1=arrived
+const FLY_SPEED  = 1.2;  // seconds to complete fly
 
-// ─── Mouse parallax state ─────────────────────────────────────────────────────
-let rawMouseX  = 0;
-let rawMouseY  = 0;
-let smoothMouseX = 0;
-let smoothMouseY = 0;
+window.addEventListener("dblclick", (e) => {
+  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+
+  // Cast against entire model (not just doors)
+  if (!model) return;
+  const allMeshes = [];
+  model.traverse(c => { if (c.isMesh) allMeshes.push(c); });
+  const hits = raycaster.intersectObjects(allMeshes, false);
+  if (hits.length === 0) return;
+
+  const pt = hits[0].point; // clicked world position
+  // Move camera 1 unit above hit point, looking slightly forward
+  const camTarget = pt.clone().add(new THREE.Vector3(0, 0.5, 1.5));
+  flyTarget   = { from: camera.position.clone(), to: camTarget, lookAt: pt };
+  flyProgress = 0;
+  showToast("🏠 Flying inside…");
+});
 
 // ─── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener("resize", () => {
-  const w = container.clientWidth;
-  const h = container.clientHeight;
+  const w = container.clientWidth, h = container.clientHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
 });
 
 // ─── Clock ────────────────────────────────────────────────────────────────────
-const clock   = new THREE.Clock();
-let   elapsed = 0;
+const clock  = new THREE.Clock();
+let elapsed  = 0;
+let smoothMouseX = 0, smoothMouseY = 0;
 
 // ─── Animation Loop ───────────────────────────────────────────────────────────
 function animate() {
@@ -342,34 +335,41 @@ function animate() {
   const delta = clock.getDelta();
   elapsed    += delta;
 
-  // Frame-rate independent lerp
-  const decay = 1 - Math.pow(0.01, delta);
-  smoothMouseX += (rawMouseX - smoothMouseX) * decay;
-  smoothMouseY += (rawMouseY - smoothMouseY) * decay;
+  // Frame-rate independent mouse lerp
+  const decay    = 1 - Math.pow(0.01, delta);
+  smoothMouseX  += (rawMouseX - smoothMouseX) * decay;
+  smoothMouseY  += (rawMouseY - smoothMouseY) * decay;
 
-  if (model) {
-    // ── NO auto-rotation: user controls with OrbitControls ──────────────────
-    // Only subtle mouse parallax tilt (no spinning)
-    model.rotation.x = smoothMouseY * 0.08;
-    model.rotation.z = smoothMouseX * 0.04;
+  // ── Camera fly animation (double-click) ───────────────────────────────────
+  if (flyTarget && flyProgress < 1) {
+    flyProgress = Math.min(flyProgress + delta / FLY_SPEED, 1);
+    const t = easeInOut(flyProgress);
+    camera.position.lerpVectors(flyTarget.from, flyTarget.to, t);
+    camera.lookAt(flyTarget.lookAt);
+    controls.target.lerp(flyTarget.lookAt, t);
+    if (flyProgress >= 1) flyTarget = null;
   }
 
-  // ── Animate all gate/door pivots ──────────────────────────────────────────
-  clickableObjects.forEach((state) => {
-    // Smooth lerp toward target angle — feels like a real hinge with friction
-    const lerpSpeed = 1 - Math.pow(0.001, delta); // very smooth
-    state.currentAngle += (state.targetAngle - state.currentAngle) * lerpSpeed;
+  // ── Door hinge animation ───────────────────────────────────────────────────
+  doorStates.forEach((state) => {
+    const hingeLerp    = 1 - Math.pow(0.0005, delta); // very smooth friction
+    state.currentAngle += (state.targetAngle - state.currentAngle) * hingeLerp;
     state.pivot.rotation.y = state.currentAngle;
   });
 
-  // Orbiting accent light
-  orbitPoint.position.x = Math.sin(elapsed * 0.5) * 8;
-  orbitPoint.position.z = Math.cos(elapsed * 0.5) * 8;
-  orbitPoint.position.y = Math.sin(elapsed * 0.3) * 3 + 2;
-  orbitPoint.intensity  = 3 + Math.sin(elapsed * 1.2) * 1.2;
+  // ── Orbiting accent light ──────────────────────────────────────────────────
+  orbitPoint.position.x = Math.sin(elapsed * 0.4) * 7;
+  orbitPoint.position.z = Math.cos(elapsed * 0.4) * 7;
+  orbitPoint.position.y = Math.sin(elapsed * 0.25) * 2.5 + 2;
+  orbitPoint.intensity  = 2.5 + Math.sin(elapsed) * 0.8;
 
   controls.update();
   renderer.render(scene, camera);
+}
+
+// Smooth ease in-out cubic
+function easeInOut(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 animate();
