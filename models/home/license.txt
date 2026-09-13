@@ -1,0 +1,11 @@
+Model Information:
+* title:	Realistic House (With Interior)
+* source:	https://sketchfab.com/3d-models/realistic-house-with-interior-c57c2019e5c84e1a8cd0c37c5b87b7ec
+* author:	Blender Studio™ (https://sketchfab.com/Blend_GUY)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Realistic House (With Interior)" (https://sketchfab.com/3d-models/realistic-house-with-interior-c57c2019e5c84e1a8cd0c37c5b87b7ec) by Blender Studio™ (https://sketchfab.com/Blend_GUY) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

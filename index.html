@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Model Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Three.js import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay">
+    <div class="loader-inner">
+      <div class="loader-spinner"></div>
+      <p class="loader-label">Loading 3D Model</p>
+      <div class="loader-bar-track">
+        <div id="load-bar"></div>
+      </div>
+      <span id="load-pct">0%</span>
+    </div>
+  </div>
+
+  <!-- Canvas mount point -->
+  <div id="Home3D"></div>
+
+  <!-- UI overlay -->
+  <div class="ui-overlay">
+    <h1 class="hero-title">3D Model Library</h1>
+    <p class="hero-sub">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Move mouse for parallax</p>
+  </div>
+
+  <!-- Badge -->
+  <a class="badge" href="#" onclick="return false">
+    <span>Three.js</span>
+  </a>
+
+  <!-- Hover tooltip -->
+  <div id="tooltip"></div>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
