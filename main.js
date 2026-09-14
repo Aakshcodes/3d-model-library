@@ -782,54 +782,69 @@ window.addEventListener("resize", () => {
   renderer.setSize(w, h);
 });
 
-// ─── Clock ────────────────────────────────────────────────────────────────────
-const clock = new THREE.Clock();
-let elapsed = 0;
-let smoothX = 0, smoothY = 0;
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANIMATE
+// ═══════════════════════════════════════════════════════════════════════════════
+const clock   = new THREE.Clock();
+let   elapsed = 0;
 
-// Cubic ease-in-out
-function easeIO(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
-
-// ─── Animate ──────────────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
-
   const delta = clock.getDelta();
   elapsed    += delta;
 
-  // Mouse smooth lerp
-  const decay = 1 - Math.pow(0.01, delta);
-  smoothX    += (rawMouseX - smoothX) * decay;
-  smoothY    += (rawMouseY - smoothY) * decay;
-
-  // ── Camera fly ────────────────────────────────────────────────────────────
-  if (fly && fly.progress < 1) {
-    fly.progress = Math.min(fly.progress + delta / 1.4, 1);
-    const t = easeIO(fly.progress);
-    camera.position.lerpVectors(fly.from, fly.to, t);
-    controls.target.lerp(fly.lookAt, t);
-    if (fly.progress >= 1) fly = null;
+  // ── Camera fly ─────────────────────────────────────────────────────────────
+  if (fly) {
+    fly.t = Math.min(fly.t + delta / 1.6, 1);
+    const et = easeIO(fly.t);
+    camera.position.lerpVectors(fly.from, fly.to, et);
+    controls.target.lerpVectors(fly.lookFrom, fly.lookTo, et);
+    if (fly.t >= 1) fly = null;
   }
 
-  // ── Door rotation (per unique group, via Set dedup) ───────────────────────
-  const animated = new Set();
-  doorStates.forEach((state) => {
-    if (animated.has(state.group.uuid)) return;
-    animated.add(state.group.uuid);
-
-    // Smooth exponential lerp — feels like a real hinge with friction
-    const lerpF = 1 - Math.pow(0.0008, delta);
-    state.currentAngle += (state.targetAngle - state.currentAngle) * lerpF;
-    state.group.rotation.y = state.currentAngle;
+  // ── Door rotation ───────────────────────────────────────────────────────────
+  const doorLerp = 1 - Math.pow(0.0006, delta);
+  doorStates.forEach(s => {
+    s.currentAngle += (s.targetAngle - s.currentAngle) * doorLerp;
+    s.group.rotation.y = s.currentAngle;
   });
 
-  // ── Orbiting accent light ─────────────────────────────────────────────────
-  orbitPoint.position.set(
-    Math.sin(elapsed * 0.4) * 7,
-    Math.sin(elapsed * 0.25) * 2 + 2.5,
-    Math.cos(elapsed * 0.4) * 7
-  );
-  orbitPoint.intensity = 2.5 + Math.sin(elapsed) * 0.8;
+  // ── Door proximity prompt ───────────────────────────────────────────────────
+  if (doorPrompt && doorStates.size > 0) {
+    let closestState = null, closestDist = Infinity;
+    doorStates.forEach(s => {
+      s.group.getWorldPosition(_wp);
+      const d = camera.position.distanceTo(_wp);
+      if (d < closestDist) { closestDist = d; closestState = s; }
+    });
+    if (closestDist < 3.5 && closestState) {
+      closestState.group.getWorldPosition(_wp);
+      _sp.copy(_wp).project(camera);
+      if (_sp.z < 1) {
+        doorPrompt.style.left = `${(_sp.x+1)/2*window.innerWidth}px`;
+        doorPrompt.style.top  = `${(-_sp.y+1)/2*window.innerHeight}px`;
+        doorPrompt.classList.add("visible");
+        activeDoorState = closestState;
+        if (btnOpen) btnOpen.textContent = closestState.open ? "🔒 Close Door" : "🚪 Open Door";
+      } else { doorPrompt.classList.remove("visible"); }
+    } else { doorPrompt.classList.remove("visible"); activeDoorState = null; }
+  }
+
+  // ── World systems ───────────────────────────────────────────────────────────
+  updateDayNight(delta);
+  rain.update(delta);
+
+  // ── Water ripple animation ──────────────────────────────────────────────────
+  waterMesh.position.y = W_LEVEL + Math.sin(elapsed * 0.55) * 0.05;
+  waterMat.roughness   = 0.06 + Math.abs(Math.sin(elapsed * 1.1)) * 0.06;
+
+  // ── Accent orbiting point light ─────────────────────────────────────────────
+  const oAngle = elapsed * 0.38;
+  const ox = Math.sin(oAngle) * 8, oz = Math.cos(oAngle) * 8;
+  orbitPt.position.set(ox, terrainY(ox, oz) + 2.5, oz);
+  orbitPt.color.setHSL((elapsed * 0.04) % 1, 0.8, 0.65);
+  orbitPt.intensity = (1.2 + Math.sin(elapsed * 0.9) * 0.5) *
+                      (WORLD.time > 19 || WORLD.time < 7 ? 2.0 : 0.4);
 
   controls.update();
   renderer.render(scene, camera);

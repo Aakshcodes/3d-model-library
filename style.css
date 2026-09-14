@@ -110,7 +110,6 @@ html, body {
   transition: width 0.3s ease;
 }
 
-/* Indeterminate shimmer — used when Content-Length is unknown */
 #load-bar.indeterminate {
   width: 40% !important;
   background: linear-gradient(90deg, transparent, #6699ff, #cc88ff, transparent);
