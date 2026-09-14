@@ -1,23 +1,25 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js";
+import { GLTFLoader }    from "https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js";
 
-// ─── Scene ────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE
+// ═══════════════════════════════════════════════════════════════════════════════
 const container = document.getElementById("Home3D");
 const scene     = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0d1a);
-scene.fog        = new THREE.FogExp2(0x0d0d1a, 0.012);
+scene.fog        = new THREE.FogExp2(0xaaddff, 0.006);
 
-// ─── Camera ───────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════════════════════════════════════════
 const camera = new THREE.PerspectiveCamera(
-  60,
-  container.clientWidth / container.clientHeight,
-  0.01,
-  500
+  60, container.clientWidth / container.clientHeight, 0.1, 2000
 );
-camera.position.set(0, 3, 14);
+camera.position.set(0, 18, 35);
 
-// ─── Renderer ─────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(container.clientWidth, container.clientHeight);
