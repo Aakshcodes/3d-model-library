@@ -29,12 +29,31 @@ html, body {
   height: 100% !important;
 }
 
+/* ─── Rain / Lightning Overlay ──────────────────────────────────────────────── */
+#rain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: transparent;
+  transition: background 1.2s ease;
+}
+
+#rain-overlay.active {
+  background: rgba(5, 12, 30, 0.22);
+}
+
+#rain-overlay.lightning {
+  background: rgba(210, 230, 255, 0.55) !important;
+  transition: background 0.04s ease;
+}
+
 /* ─── Loading Overlay ─────────────────────────────────────────────────────── */
 #loading-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #0d0d1a;
+  background: #010315;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -159,7 +178,7 @@ html, body {
   background: rgba(100, 120, 255, 0.12);
   border: 1px solid rgba(100, 150, 255, 0.25);
   color: #99aaff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -169,11 +188,11 @@ html, body {
 }
 
 .badge:hover {
-  background: rgba(100, 120, 255, 0.25);
+  background: rgba(100, 120, 255, 0.28);
   color: #fff;
 }
 
-/* ─── Hover Tooltip ────────────────────────────────────────────────────────── */
+/* ─── Hover Tooltip ─────────────────────────────────────────────────────────── */
 #tooltip {
   position: fixed;
   bottom: 5rem;
@@ -195,7 +214,7 @@ html, body {
   white-space: nowrap;
 }
 
-/* ─── Toast ─────────────────────────────────────────────────────────────────── */
+/* ─── Toast ──────────────────────────────────────────────────────────────────── */
 #toast {
   position: fixed;
   top: 1.5rem;
