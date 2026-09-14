@@ -36,15 +36,56 @@
   <!-- Canvas mount point -->
   <div id="Home3D"></div>
 
-  <!-- UI overlay -->
+  <!-- Rain / lightning overlay -->
+  <div id="rain-overlay"></div>
+
+  <!-- UI overlay (title & hints) -->
   <div class="ui-overlay">
-    <h1 class="hero-title">3D Model Library</h1>
-    <p class="hero-sub">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; <span class="hint-door">Click door to open</span> &nbsp;·&nbsp; <span class="hint-fly">Double-click to fly inside</span></p>
+    <h1 class="hero-title">Akash World</h1>
+    <p class="hero-sub">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; <span class="hint-door">Click door to open</span> &nbsp;·&nbsp; <span class="hint-fly">Explore the world</span></p>
+  </div>
+
+  <!-- World HUD (top-left panel) -->
+  <div id="world-hud">
+    <div class="hud-clock">
+      <span id="hud-sky-icon">☀️</span>
+      <span id="world-time-display">08:00</span>
+    </div>
+
+    <div class="hud-section">
+      <label class="hud-label">Time of Day</label>
+      <input type="range" id="time-slider" min="0" max="24" step="0.05" value="8" />
+    </div>
+
+    <div class="hud-section">
+      <div class="hud-presets">
+        <button class="hud-btn preset-btn" data-time="6"  title="Dawn">🌅</button>
+        <button class="hud-btn preset-btn" data-time="12" title="Noon">☀️</button>
+        <button class="hud-btn preset-btn" data-time="19" title="Dusk">🌇</button>
+        <button class="hud-btn preset-btn" data-time="23" title="Night">🌙</button>
+      </div>
+    </div>
+
+    <div class="hud-section">
+      <label class="hud-label">Speed</label>
+      <input type="range" id="speed-slider" min="0" max="6" step="0.1" value="0.3" />
+    </div>
+
+    <div class="hud-section hud-weather-row">
+      <button class="hud-btn weather-btn active" id="btn-clear">🌤️ Clear</button>
+      <button class="hud-btn weather-btn" id="btn-rain">🌧️ Rain</button>
+    </div>
+  </div>
+
+  <!-- Door proximity prompt -->
+  <div id="door-prompt">
+    <button id="btn-open-door">🚪 Open Door</button>
+    <button id="btn-go-inside">🏠 Go Inside</button>
   </div>
 
   <!-- Badge -->
   <a class="badge" href="#" onclick="return false">
-    <span>Three.js</span>
+    <span>Akash World · Three.js</span>
   </a>
 
   <!-- Hover tooltip -->
