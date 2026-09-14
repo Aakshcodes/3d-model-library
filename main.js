@@ -47,9 +47,11 @@ controls.maxPolarAngle  = Math.PI * 0.84;
 // ═══════════════════════════════════════════════════════════════════════════════
 const WORLD = {
   time:      8.0,   // 0–24 world hours
-  timeSpeed: 0.3,   // world-hours per real second  (full day ≈ 80s real time)
+  timeSpeed: 0.0,   // 0 = paused — user controls via slider / play button
   raining:   false,
 };
+
+let timePlaying = false; // starts paused
 
 let sliderDragging = false;
 
@@ -125,10 +127,13 @@ const W_LEVEL  = -1.8;   // water surface y
  * Keeps a flat clearing at the centre for the house.
  */
 function terrainY(x, z) {
-  const d         = Math.sqrt(x * x + z * z);
-  const flatMask  = Math.max(0, 1 - d / 11);           // 11-unit flat zone
-  const raw       = fbm(x / 48, z / 48, 6);
-  return (raw * T_HEIGHT - T_HEIGHT * 0.28) * (1 - flatMask * 0.94);
+  const d        = Math.sqrt(x * x + z * z);
+  const FLAT_R   = 18;                           // flat zone radius in world units
+  // smoothstep curve: 0 at centre → 1 at FLAT_R, smooth S-curve (no cliff)
+  const t        = Math.min(d / FLAT_R, 1.0);
+  const flatMask = 1.0 - t * t * (3 - 2 * t);   // smoothstep, range 1→0
+  const raw      = fbm(x / 48, z / 48, 6);
+  return (raw * T_HEIGHT - T_HEIGHT * 0.28) * (1 - flatMask * 0.97);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -541,17 +546,26 @@ loader.load(
     clearTimeout(loadTout);
     model = gltf.scene;
 
-    // Scale & centre
+    // ── Scale & place model ─────────────────────────────────────────────────
+    // Compute bounding box in LOCAL space (model not yet scaled / moved)
     const box    = new THREE.Box3().setFromObject(model);
     const size   = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const sc     = 6 / Math.max(size.x, size.y, size.z);
-    model.scale.setScalar(sc);
-    model.position.sub(center.multiplyScalar(sc));
 
-    // Sit on terrain
+    model.scale.setScalar(sc);
+
+    // After scaling by sc, the world-space bottom of the model would be
+    // at (box.min.y * sc) if position were zero.  We want that to sit
+    // exactly on the terrain surface, so:
+    //   model.position.y + box.min.y * sc  = groundY
+    //   model.position.y = groundY - box.min.y * sc
     const groundY = terrainY(0, 0);
-    model.position.y += groundY;
+    model.position.set(
+      -center.x * sc,                  // centre X over origin
+      groundY - box.min.y * sc,         // floor of model = terrain surface
+      -center.z * sc                   // centre Z over origin
+    );
 
     scene.add(model);
 
@@ -644,13 +658,47 @@ if (timeSlider) {
 window.addEventListener('mouseup',  () => { sliderDragging = false; });
 window.addEventListener('touchend', () => { sliderDragging = false; });
 
-if (speedSlider) speedSlider.addEventListener('input', () => { WORLD.timeSpeed = parseFloat(speedSlider.value); });
+// ── Single source-of-truth helpers ────────────────────────────────────────
+function _syncPlayBtn() {
+  const pb = document.getElementById('btn-playpause');
+  if (pb) pb.textContent = timePlaying ? '⏸️ Pause' : '▶️ Play';
+}
+function setPlaying() {
+  if (WORLD.timeSpeed === 0) { WORLD.timeSpeed = 0.3; if (speedSlider) speedSlider.value = 0.3; }
+  timePlaying = true;
+  _syncPlayBtn();
+}
+function setPaused() {
+  timePlaying = false;
+  _syncPlayBtn();
+}
+
+if (speedSlider) speedSlider.addEventListener('input', () => {
+  WORLD.timeSpeed = parseFloat(speedSlider.value);
+  // Speed to 0 = visual pause; speed > 0 = auto-play
+  if (WORLD.timeSpeed === 0) setPaused();
+  else if (!timePlaying)    setPlaying();
+});
 
 document.querySelectorAll('.preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     WORLD.time = parseFloat(btn.dataset.time);
     if (timeSlider) timeSlider.value = WORLD.time;
+    WORLD.timeSpeed = 0;
+    if (speedSlider) speedSlider.value = 0;
+    setPaused();
   });
+});
+
+// Play / Pause button toggle
+document.getElementById('btn-playpause')?.addEventListener('click', () => {
+  if (timePlaying) {
+    setPaused();
+    showToast('⏸️ Time paused');
+  } else {
+    setPlaying();
+    showToast('▶️ Time flowing…');
+  }
 });
 
 document.getElementById('btn-rain')?.addEventListener('click',  () => rain.setRaining(true));
@@ -706,7 +754,8 @@ function getSkyColors(t) {
 // DAY / NIGHT UPDATE
 // ═══════════════════════════════════════════════════════════════════════════════
 function updateDayNight(dt) {
-  if (!sliderDragging) {
+  // timePlaying is the single source of truth — no need to also check timeSpeed
+  if (timePlaying && !sliderDragging) {
     WORLD.time = (WORLD.time + dt * WORLD.timeSpeed) % 24;
   }
   const t = WORLD.time;
